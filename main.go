@@ -13,13 +13,43 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// UserRecord struct
 type UserRecord struct {
 	ID    string
 	Email string
 }
 
-func main() {
+// store
+type Store struct {
+	Conn *sqlx.DB
+}
+type Server struct {
+	Store *Store
+}
 
+func (s *Server) listUsersHandler(w http.ResponseWriter, r *http.Request) {
+	users, err := s.Store.listUsers()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	err = json.NewEncoder(w).Encode(users)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+}
+
+func (s *Store) listUsers() ([]*UserRecord, error) {
+	users := []*UserRecord{}
+	err := s.Conn.Select(&users, "SELECT * FROM users")
+	if err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+func main() {
 	conn, err := sqlx.Connect(
 		"postgres",
 		"postgres://rdhruvi23:Mayoor20@localhost:5432/imagio?sslmode=disable",
@@ -29,14 +59,12 @@ func main() {
 		return
 
 	}
-
-	err = conn.Ping()
-	if err != nil {
-		fmt.Println(err)
-		return
+	store := &Store{
+		Conn: conn,
 	}
-
-	UserStore = []*User{}
+	server := &Server{
+		Store: store,
+	}
 
 	// Create a new Router
 	r := chi.NewRouter()
@@ -49,11 +77,11 @@ func main() {
 
 	// State that the server is running
 	fmt.Println("Running on :8080")
-	r.Get("/api/users", listUserHandler)
-	r.Post("/api/users/create", createUserHandler)
-	r.Get("/api/users", readUserHandler)
-	r.Post("/api/users/update", updateUserHandler)
-	r.Delete("/api/users/delete", deleteUserHandler)
+	r.Get("/api/users", server.listUsersHandler)
+	// r.Post("/api/users/create", createUserHandler)
+	// r.Get("/api/users", readUserHandler)
+	// r.Post("/api/users/update", updateUserHandler)
+	// r.Delete("/api/users/delete", deleteUserHandler)
 
 	// Run the server
 	log.Fatalln(http.ListenAndServe(":8080", r))
@@ -61,7 +89,8 @@ func main() {
 }
 
 func listUserHandler(w http.ResponseWriter, req *http.Request) { // Handler
-	err := json.NewEncoder(w).Encode(UserStore)
+	userStore := listUsers()
+	err := json.NewEncoder(w).Encode(userStore)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
